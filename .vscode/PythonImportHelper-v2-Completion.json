@@ -1,0 +1,203 @@
+[
+    {
+        "label": "tkinter",
+        "kind": 6,
+        "isExtraImport": true,
+        "importPath": "tkinter",
+        "description": "tkinter",
+        "detail": "tkinter",
+        "documentation": {}
+    },
+    {
+        "label": "ttk",
+        "importPath": "tkinter",
+        "description": "tkinter",
+        "isExtraImport": true,
+        "detail": "tkinter",
+        "documentation": {}
+    },
+    {
+        "label": "messagebox",
+        "importPath": "tkinter",
+        "description": "tkinter",
+        "isExtraImport": true,
+        "detail": "tkinter",
+        "documentation": {}
+    },
+    {
+        "label": "ttk",
+        "importPath": "tkinter",
+        "description": "tkinter",
+        "isExtraImport": true,
+        "detail": "tkinter",
+        "documentation": {}
+    },
+    {
+        "label": "messagebox",
+        "importPath": "tkinter",
+        "description": "tkinter",
+        "isExtraImport": true,
+        "detail": "tkinter",
+        "documentation": {}
+    },
+    {
+        "label": "filedialog",
+        "importPath": "tkinter",
+        "description": "tkinter",
+        "isExtraImport": true,
+        "detail": "tkinter",
+        "documentation": {}
+    },
+    {
+        "label": "ttk",
+        "importPath": "tkinter",
+        "description": "tkinter",
+        "isExtraImport": true,
+        "detail": "tkinter",
+        "documentation": {}
+    },
+    {
+        "label": "messagebox",
+        "importPath": "tkinter",
+        "description": "tkinter",
+        "isExtraImport": true,
+        "detail": "tkinter",
+        "documentation": {}
+    },
+    {
+        "label": "filedialog",
+        "importPath": "tkinter",
+        "description": "tkinter",
+        "isExtraImport": true,
+        "detail": "tkinter",
+        "documentation": {}
+    },
+    {
+        "label": "BytesIO",
+        "importPath": "io",
+        "description": "io",
+        "isExtraImport": true,
+        "detail": "io",
+        "documentation": {}
+    },
+    {
+        "label": "BytesIO",
+        "importPath": "io",
+        "description": "io",
+        "isExtraImport": true,
+        "detail": "io",
+        "documentation": {}
+    },
+    {
+        "label": "Path",
+        "importPath": "pathlib",
+        "description": "pathlib",
+        "isExtraImport": true,
+        "detail": "pathlib",
+        "documentation": {}
+    },
+    {
+        "label": "Path",
+        "importPath": "pathlib",
+        "description": "pathlib",
+        "isExtraImport": true,
+        "detail": "pathlib",
+        "documentation": {}
+    },
+    {
+        "label": "MilStd2525EApp",
+        "importPath": "milstd2525e_sidc",
+        "description": "milstd2525e_sidc",
+        "isExtraImport": true,
+        "detail": "milstd2525e_sidc",
+        "documentation": {}
+    },
+    {
+        "label": "MilStd2525EApp",
+        "importPath": "milstd2525e_sidc",
+        "description": "milstd2525e_sidc",
+        "isExtraImport": true,
+        "detail": "milstd2525e_sidc",
+        "documentation": {}
+    },
+    {
+        "label": "Link16Ed9Extractor",
+        "importPath": "link16_ed9",
+        "description": "link16_ed9",
+        "isExtraImport": true,
+        "detail": "link16_ed9",
+        "documentation": {}
+    },
+    {
+        "label": "Link16Ed9Extractor",
+        "kind": 6,
+        "importPath": "link16_ed9",
+        "description": "link16_ed9",
+        "peekOfCode": "class Link16Ed9Extractor:\n    # 1. Karakter: Kimlik (Poz 4 - DFI 279 / DUI 001)\n    ID_MAP = {\n        \"0\": (\"P\", \"Pending (000)\"),\n        \"1\": (\"U\", \"Unknown (001)\"),\n        \"2\": (\"A\", \"Assumed Friend (010)\"),\n        \"3\": (\"F\", \"Friend (011)\"),\n        \"4\": (\"N\", \"Neutral (100)\"),\n        \"5\": (\"S\", \"Suspect (101)\"),\n        \"6\": (\"H\", \"Hostile (110)\"),",
+        "detail": "link16_ed9",
+        "documentation": {}
+    },
+    {
+        "label": "MilStd2525EApp",
+        "kind": 6,
+        "importPath": "milstd2525e_sidc",
+        "description": "milstd2525e_sidc",
+        "peekOfCode": "class MilStd2525EApp:\n    def __init__(self, root):\n        self.root = root\n        self.root.title(\"MIL-STD-2525E SIDC Oluşturucu ve Çözümleyici\")\n        self.root.geometry(\"950x820\")\n        self.init_data()\n        self.build_ui()\n        self.on_symset_change(init_mode=True)\n    def init_data(self):\n        # SET A Tabloları (Tablo A-I .. A-VIII)",
+        "detail": "milstd2525e_sidc",
+        "documentation": {}
+    },
+    {
+        "label": "Link16Ed9Extractor",
+        "kind": 6,
+        "importPath": "milstd2525e_visualizer",
+        "description": "milstd2525e_visualizer",
+        "peekOfCode": "class Link16Ed9Extractor:\n    \"\"\"\n    30 haneli MIL-STD-2525E SIDC kodundan STANAG 5516 Edition 9\n    5 karakterli teşhis kodunu ([1:Kimlik] + [2:Platform] + [2:Activity])\n    ve DFI/DUI detaylarını çıkarır (Örn: FFTCP, FBMBM, KFTIN).\n    \"\"\"\n    # 1. Karakter: Kimlik (DFI 279 / DUI 001 - 3 Bit)\n    ID_CHAR = {\n        \"0\": (\"P\", \"000\", \"Pending (Beklemede)\"),\n        \"1\": (\"U\", \"001\", \"Unknown (Bilinmeyen)\"),",
+        "detail": "milstd2525e_visualizer",
+        "documentation": {}
+    },
+    {
+        "label": "MilStd2525EVisualizer",
+        "kind": 6,
+        "importPath": "milstd2525e_visualizer",
+        "description": "milstd2525e_visualizer",
+        "peekOfCode": "class MilStd2525EVisualizer(BaseApp):\n    \"\"\"Visual browser built on top of the supplied SIDC generator.\"\"\"\n    def __init__(self, root):\n        self.symbol_photo = None\n        self.render_after_id = None\n        self._last_svg = None\n        self._last_used_sidc = \"\"\n        super().__init__(root)\n        self.root.minsize(1150, 840)\n        self.root.protocol(\"WM_DELETE_WINDOW\", self.on_close)",
+        "detail": "milstd2525e_visualizer",
+        "documentation": {}
+    },
+    {
+        "label": "main",
+        "kind": 2,
+        "importPath": "milstd2525e_visualizer",
+        "description": "milstd2525e_visualizer",
+        "peekOfCode": "def main():\n    root = tk.Tk()\n    if Symbol is None:\n        root.after(\n            300,\n            lambda: messagebox.showwarning(\n                \"milsymbol eksik\",\n                \"2525E sembollerini çizmek için önce:\\n\\n\"\n                \"pip install -r requirements.txt\\n\\n\"\n                \"komutunu çalıştır.\"",
+        "detail": "milstd2525e_visualizer",
+        "documentation": {}
+    },
+    {
+        "label": "Link16Ed9Extractor",
+        "kind": 6,
+        "importPath": "visualizerGrk",
+        "description": "visualizerGrk",
+        "peekOfCode": "class Link16Ed9Extractor:\n    \"\"\"\n    30 haneli MIL-STD-2525E SIDC kodundan STANAG 5516 Edition 9\n    5 karakterli teşhis kodunu ([1:Kimlik] + [2:Platform] + [2:Activity])\n    ve DFI/DUI detaylarını çıkarır.\n    Ayrıca ters yönde (5 karakter → önerilen SIDC) destekler.\n    \"\"\"\n    # 1. Karakter: Kimlik (DFI 279 / DUI 001 - 3 Bit)\n    ID_CHAR = {\n        \"0\": (\"P\", \"000\", \"Pending (Beklemede)\"),",
+        "detail": "visualizerGrk",
+        "documentation": {}
+    },
+    {
+        "label": "MilStd2525EVisualizer",
+        "kind": 6,
+        "importPath": "visualizerGrk",
+        "description": "visualizerGrk",
+        "peekOfCode": "class MilStd2525EVisualizer(BaseApp):\n    \"\"\"Visual browser built on top of the supplied SIDC generator.\"\"\"\n    def __init__(self, root):\n        self.symbol_photo = None\n        self.render_after_id = None\n        self._last_svg = None\n        self._last_used_sidc = \"\"\n        super().__init__(root)\n        self.root.minsize(1150, 840)\n        self.root.protocol(\"WM_DELETE_WINDOW\", self.on_close)",
+        "detail": "visualizerGrk",
+        "documentation": {}
+    },
+    {
+        "label": "main",
+        "kind": 2,
+        "importPath": "visualizerGrk",
+        "description": "visualizerGrk",
+        "peekOfCode": "def main():\n    root = tk.Tk()\n    if Symbol is None:\n        root.after(\n            300,\n            lambda: messagebox.showwarning(\n                \"milsymbol eksik\",\n                \"2525E sembollerini çizmek için önce:\\n\\n\"\n                \"pip install -r requirements.txt\\n\\n\"\n                \"komutunu çalıştır.\"",
+        "detail": "visualizerGrk",
+        "documentation": {}
+    }
+]
