@@ -1,0 +1,4 @@
+# Sistem paketleri (Debian/Ubuntu): sudo apt install python3-tk libcairo2
+milsymbol
+cairosvg
+Pillow

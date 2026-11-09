@@ -1,0 +1,10 @@
+﻿Link16_Kimlik_Harfi,SIDC_Context,SIDC_Identity,Bitler,Aciklama
+P,0 (Reality),0 - Pending,000,Pending (Beklemede)
+U,0 (Reality),1 - Unknown,001,Unknown (Bilinmeyen)
+A,0 (Reality),2 - Assumed Friend,010,Assumed Friend (Muhtemel Dost)
+F,0 (Reality),3 - Friend,011,Friend (Dost)
+N,0 (Reality),4 - Neutral,100,Neutral (Tarafsız)
+S,0 (Reality),5 - Suspect/Joker,101,Suspect (Şüpheli)
+H,0 (Reality),6 - Hostile/Faker,110,Hostile (Düşman)
+K,"1, 5, 6 (Exercise)",6 - Hostile/Faker,110,FAKER (Tatbikat düşmanı)
+J,"1, 5, 6 (Exercise)",5 - Suspect/Joker,101,JOKER (Tatbikat şüphelisi)

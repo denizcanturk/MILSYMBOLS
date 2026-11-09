@@ -5,15 +5,24 @@ MIL-STD-2525E Symbol Visualizer + STANAG 5516 Ed. 9 ID Extractor
 Uses the user's original SIDC generator/decoder as the data source,
 milsymbol-py for SVG rendering, and extracts STANAG 5516 Ed. 9 tactical IDs.
 
-YENİ: Link 16 Teşhis kodundan SIDC üretme (ters dönüşüm) eklendi.
+Link 16 teşhis kodundan SIDC üretme (ters dönüşüm) dahildir.
+
+Kurulum:
+  sudo apt install python3-tk libcairo2
+  pip install -r requirements.txt
+
+Çalıştırma:
+  python3 visualizerGrk.py
 """
 
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
+from collections import OrderedDict
 from io import BytesIO
 from pathlib import Path
 
 from milstd2525e_sidc import MilStd2525EApp as BaseApp
+from link16_ed9 import Link16Ed9Extractor
 
 try:
     from milsymbol import Symbol
@@ -31,432 +40,13 @@ except (ImportError, OSError, Exception):
     cairosvg = None
 
 
-# =====================================================================
-# 1. STANAG 5516 ED. 9 TEŞHİS ÇIKARIM + TERS DÖNÜŞÜM MOTORU
-# =====================================================================
-class Link16Ed9Extractor:
-    """
-    30 haneli MIL-STD-2525E SIDC kodundan STANAG 5516 Edition 9
-    5 karakterli teşhis kodunu ([1:Kimlik] + [2:Platform] + [2:Activity])
-    ve DFI/DUI detaylarını çıkarır.
-    Ayrıca ters yönde (5 karakter → önerilen SIDC) destekler.
-    """
-
-    # 1. Karakter: Kimlik (DFI 279 / DUI 001 - 3 Bit)
-    ID_CHAR = {
-        "0": ("P", "000", "Pending (Beklemede)"),
-        "1": ("U", "001", "Unknown (Bilinmeyen)"),
-        "2": ("A", "010", "Assumed Friend (Muhtemel Dost)"),
-        "3": ("F", "011", "Friend (Dost)"),
-        "4": ("N", "100", "Neutral (Tarafsız)"),
-        "5": ("S", "101", "Suspect (Şüpheli)"),
-        "6": ("H", "110", "Hostile (Düşman)"),
-    }
-
-    # Hava (Symbol Set 01) Entity (Poz 11-16) -> (Platform 2-Harf, Varsayılan Activity 2-Harf, Açıklama)
-    AIR_ENTITY_MAP = {
-        "110000": ("FW", "NS", "Military Air (Askeri Hava Genel)"),
-        "110100": ("FW", "NS", "Fixed Wing (Sabit Kanat)"),
-        "110101": ("FT", "CP", "Fighter (Av/Önleme)"),
-        "110102": ("FB", "AT", "Fighter / Bomber (Av-Bombardıman)"),
-        "110103": ("BM", "BM", "Bomber (Bombardıman)"),
-        "110104": ("CA", "AL", "Cargo / Airlift (Nakliye)"),
-        "110105": ("JM", "JM", "Electronic Attack (ECM/Jammer)"),
-        "110106": ("TK", "TK", "Tanker (Hava Yakıt İkmal)"),
-        "110107": ("PT", "PT", "Patrol (Karakol)"),
-        "110108": ("RS", "SR", "Rescue (Arama Kurtarma / SAR)"),
-        "110109": ("RC", "RC", "Reconnaissance (Keşif / İGK)"),
-        "110110": ("EW", "EW", "AEW / AWACS (Hava Erken İhbar)"),
-        "110111": ("ES", "RC", "Electronic Surveillance (ESM)"),
-        "110112": ("AS", "AW", "ASW / Carrier Based (Denizaltı Savunma)"),
-        "110113": ("TR", "TR", "Trainer (Eğitim)"),
-        "110114": ("UT", "UT", "Utility (Genel Maksat)"),
-        "110115": ("CP", "CC", "Command Post (Havadan K2)"),
-        "110116": ("MP", "PT", "Maritime Patrol (Deniz Karakol - MPA)"),
-        "110123": ("AT", "AT", "Attack / Strike (Taarruz)"),
-        "110200": ("HL", "NS", "Helicopter (Döner Kanat)"),
-        "110300": ("UV", "RC", "UAV / RPV (İnsansız Hava Aracı)"),
-        "110400": ("VS", "NS", "VSTOL (Dikine İniş/Kalkış)"),
-        "120000": ("CV", "CA", "Civil Aircraft (Sivil Hava Aracı)"),
-        "120100": ("CV", "PA", "Civil Fixed Wing (Ticari/Yolcu)"),
-        "120200": ("CH", "CA", "Civil Helicopter (Sivil Helikopter)"),
-        "130000": ("DC", "DC", "Decoy (Sahte Hedef / Aldatıcı)"),
-    }
-
-    # Hava Sector 1 Modifier (Poz 17-18) -> (Override Platform 2-Harf, Activity 2-Harf, Açıklama)
-    AIR_MOD1_MAP = {
-        "01": ("AT", "AT", "Attack / Strike (Taarruz)"),
-        "02": ("BM", "BM", "Bomber (Bombardıman)"),
-        "03": ("CA", "AL", "Cargo / Airlift (Nakliye)"),
-        "04": ("FT", "CP", "Fighter / CAP (Muharebe Hava Devriyesi)"),
-        "05": ("FT", "IN", "Interceptor (Önleme)"),
-        "06": ("TK", "TK", "Tanker (Yakıt İkmal)"),
-        "07": ("UT", "UT", "Utility (Genel Maksat)"),
-        "08": ("VS", "NS", "VSTOL"),
-        "09": ("CV", "PA", "Passenger (Yolcu Taşıma)"),
-        "10": ("AS", "AW", "ASW (Denizaltı Savunma Harbi)"),
-        "11": ("MC", "MC", "MCM (Mayın Karşı Tedbir)"),
-        "12": ("CP", "CC", "Command & Control (Komuta Kontrol)"),
-        "13": ("JM", "JM", "Jammer / ECM (Elektronik Taarruz)"),
-        "14": ("ES", "EW", "Electronic Warfare (Elektronik Harp)"),
-        "15": ("RC", "RC", "Reconnaissance (Keşif)"),
-        "16": ("EW", "EW", "AEW / AWACS (Hava Erken İhbar)"),
-        "17": ("AS", "SU", "ASUW (Suüstü Harbi)"),
-        "18": ("FB", "AT", "Fighter / Bomber (Av-Bombardıman)"),
-        "19": ("RS", "SR", "SAR (Arama Kurtarma)"),
-        "20": ("RS", "CS", "CSAR (Muharebe Arama Kurtarma)"),
-        "24": ("SF", "SF", "SOF (Özel Kuvvetler)"),
-        "29": ("TR", "TR", "Trainer (Eğitim)"),
-        "32": ("AT", "CS", "Close Air Support (Yakın Hava Desteği - CAS)"),
-        "33": ("AT", "SD", "SEAD (Hava Savunma Baskılama)"),
-    }
-
-    # Hava Sector 2 Modifier (Poz 19-20) -> (Ek Görev / Nitelik 2-Harf, Açıklama)
-    AIR_MOD2_MAP = {
-        "01": ("HV", "Heavy (Ağır)"),
-        "02": ("MD", "Medium (Orta)"),
-        "03": ("LT", "Light (Hafif)"),
-        "04": ("BO", "Boom-Only (Sadece Boom İkmal)"),
-        "05": ("DR", "Drogue-Only (Sadece Sepet İkmal)"),
-        "06": ("BD", "Boom and Drogue"),
-        "07": ("CR", "Close Range (Yakın Menzil)"),
-        "08": ("SR", "Short Range (Kısa Menzil)"),
-        "09": ("MR", "Medium Range (Orta Menzil)"),
-        "10": ("LR", "Long Range (Uzun Menzil)"),
-    }
-
-    # Deniz Suüstü (Symbol Set 30) Entity -> (Platform 2-Harf, Activity 2-Harf, Açıklama)
-    SURFACE_ENTITY_MAP = {
-        "110000": ("SC", "NS", "Military Combatant (Askeri Suüstü Genel)"),
-        "120100": ("CV", "AC", "Carrier (Uçak Gemisi)"),
-        "120200": ("SC", "SU", "Surface Combatant (Suüstü Muharip)"),
-        "120201": ("BB", "SU", "Battleship (Zırhlı)"),
-        "120202": ("CG", "SU", "Cruiser (Kruvazör)"),
-        "120203": ("DD", "SU", "Destroyer (Muhrip)"),
-        "120204": ("FF", "SU", "Frigate (Fırkateyn)"),
-        "120205": ("FS", "PT", "Corvette (Korvet)"),
-        "120206": ("LC", "PT", "Littoral Combatant Ship (Kıyı Muharebe Gemisi)"),
-        "120300": ("AM", "AM", "Amphibious Warfare Ship (Amfibi Harp Gemisi)"),
-        "120400": ("MW", "MC", "Mine Warfare Vessel (Mayın Harp Gemisi)"),
-        "120500": ("PC", "PT", "Patrol Craft (Karakol Botu)"),
-        "120700": ("HC", "PT", "Hovercraft / ACV"),
-        "120800": ("TF", "CC", "Navy Task Force / Group (Görev Grubu)"),
-        "130000": ("AX", "SP", "Non-Combatant / Auxiliary (Yardımcı Sınıf)"),
-        "140000": ("MC", "MR", "Merchant Ship (Ticari Gemi)"),
-        "140100": ("MC", "CG", "Cargo Ship (Yük Gemisi)"),
-        "140200": ("PS", "PA", "Passenger Ship (Yolcu Gemisi)"),
-        "140500": ("TG", "SP", "Tug (Römorkör)"),
-        "140600": ("FE", "PA", "Ferry (Feribot)"),
-        "140800": ("AO", "TK", "Tanker / Oiler (Akaryakıt Gemisi)"),
-        "150100": ("FV", "FS", "Fishing Vessel (Balıkçı Gemisi)"),
-    }
-
-    # Sualtı (Symbol Set 35 & 36)
-    SUBSURFACE_ENTITY_MAP = {
-        "110000": ("SB", "NS", "Subsurface Military (Sualtı Genel)"),
-        "110100": ("SS", "PT", "Submarine (Denizaltı)"),
-        "110101": ("SN", "PT", "Nuclear Submarine (Nükleer Denizaltı - SSN/SSBN)"),
-        "110102": ("SK", "PT", "Conventional Submarine (Klasik Denizaltı - SSK)"),
-        "110200": ("SM", "NS", "Other Submersible (Diğer Sualtı Aracı)"),
-        "110400": ("UV", "RC", "Autonomous Underwater Vehicle (İDA / UUV)"),
-        "120000": ("DC", "DC", "Subsurface Decoy (Sualtı Aldatıcı)"),
-        "130100": ("TP", "AT", "Torpedo (Torpido)"),
-        "130200": ("MN", "MW", "Sea Mine (Deniz Mayını)"),
-    }
-
-    # Kara (Symbol Set 10, 11, 15, 20)
-    LAND_ENTITY_MAP = {
-        "110000": ("GR", "NS", "Land Unit (Kara Birliği Genel)"),
-        "120500": ("AR", "AT", "Armor / Tank (Zırhlı / Tank)"),
-        "120600": ("HL", "AS", "Army Aviation (Kara Havacılık)"),
-        "121100": ("IN", "GD", "Infantry (Piyade)"),
-        "121102": ("MI", "GD", "Mechanized Infantry (Mekanize Piyade)"),
-        "130100": ("AD", "AD", "Air Defense (Hava Savunma)"),
-        "130102": ("SM", "AD", "SAM System (Karadan Havaya Füze)"),
-        "130300": ("FA", "FS", "Field Artillery (Sahra Topçusu)"),
-        "130800": ("MS", "AT", "Surface-to-Surface Missile (Karadan Karaya Füze)"),
-        "140100": ("EN", "SP", "Engineer (İstihkam)"),
-        "140700": ("RC", "RC", "Reconnaissance (Keşif)"),
-        "150500": ("EW", "JM", "Electronic Warfare (Elektronik Harp)"),
-        "151000": ("RD", "SV", "Radar / Sensor (Radar / Gözetleme)"),
-    }
-
-    @classmethod
-    def extract(cls, sidc: str) -> dict:
-        s = (sidc or "").strip()
-        if len(s) < 20:
-            return {
-                "code_5char": "-----",
-                "breakdown": "Geçersiz SIDC",
-                "details": "SIDC en az 20 hane olmalıdır."
-            }
-
-        ctx = s[2]          # Poz 3: Context (0=Real, 1=Exercise, 2=Sim)
-        ident = s[3]        # Poz 4: Identity (0-6)
-        symset = s[4:6]     # Poz 5-6: Symbol Set
-        entity = s[10:16]   # Poz 11-16: Entity
-        mod1 = s[16:18]     # Poz 17-18: Sector 1 Modifier
-        mod2 = s[18:20]     # Poz 19-20: Sector 2 Modifier
-
-        # --- 1. HARF: KİMLİK (IDENTITY + JOKER/FAKER) ---
-        c1, bits, id_desc = cls.ID_CHAR.get(ident, ("U", "001", "Unknown"))
-        if ctx == "1":  # Exercise (Tatbikat)
-            if ident == "6":
-                c1, id_desc = "K", f"FAKER (Tatbikat Düşmanı - EX=1, ID=6 [{bits}])"
-            elif ident == "5":
-                c1, id_desc = "J", f"JOKER (Tatbikat Şüphelisi - EX=1, ID=5 [{bits}])"
-            else:
-                id_desc = f"Exercise {id_desc} (EX=1, Bits={bits})"
-        else:
-            id_desc = f"{id_desc} (EX=0, Bits={bits})"
-
-        # --- 2-3. HARF (PLATFORM) & 4-5. HARF (ACTIVITY) ---
-        plat_2c, act_2c, desc = "NS", "NS", "No Statement (Tanımsız)"
-        j_msg = "J3.x"
-
-        if symset == "01":  # HAVA (AIR)
-            j_msg = "J3.2 (Air Track) / J2.2 (Air PPLI)"
-            row = cls._lookup(cls.AIR_ENTITY_MAP, entity)
-            if row:
-                plat_2c, act_2c, desc = row
-
-            # Sector 1 Modifier (Poz 17-18) varsa Activity ve genel Platformu ez:
-            if mod1 in cls.AIR_MOD1_MAP:
-                m_plat, m_act, m_desc = cls.AIR_MOD1_MAP[mod1]
-                act_2c = m_act
-                if entity in ("110000", "110100", "000000"):
-                    plat_2c = m_plat
-                desc = f"{desc} -> {m_desc}" if entity in ("110000", "110100", "000000") else f"{desc} | Görev: {m_desc}"
-
-            if mod2 in cls.AIR_MOD2_MAP:
-                _, m2_desc = cls.AIR_MOD2_MAP[mod2]
-                desc = f"{desc} ({m2_desc})"
-
-        elif symset == "02":  # HAVA FÜZESİ (AIR MISSILE)
-            j_msg = "J3.2 (Air Track - Missile)"
-            plat_2c, act_2c, desc = "MS", "AT", "Air Missile (Hava Füzesi)"
-
-        elif symset in ("05", "06"):  # UZAY (SPACE)
-            j_msg = "J3.6 (Space Track)"
-            plat_2c, act_2c, desc = "SV", "OR", "Space Vehicle (Uzay Platformu)"
-
-        elif symset == "30":  # SUÜSTÜ (SEA SURFACE)
-            j_msg = "J3.3 (Surface Track) / J2.3 (Surface PPLI)"
-            row = cls._lookup(cls.SURFACE_ENTITY_MAP, entity)
-            if row:
-                plat_2c, act_2c, desc = row
-            else:
-                plat_2c, act_2c, desc = "SC", "NS", f"Surface Entity ({entity})"
-
-        elif symset in ("35", "36"):  # SUALTI (SUBSURFACE)
-            j_msg = "J3.4 (Subsurface Track)"
-            if symset == "36":
-                plat_2c, act_2c, desc = "MN", "MW", "Sea Mine (Deniz Mayını)"
-            else:
-                row = cls._lookup(cls.SUBSURFACE_ENTITY_MAP, entity)
-                if row:
-                    plat_2c, act_2c, desc = row
-                else:
-                    plat_2c, act_2c, desc = "SS", "NS", f"Subsurface Entity ({entity})"
-
-        elif symset in ("10", "11", "15", "20"):  # KARA (LAND)
-            j_msg = "J3.5 (Land Track/Point) / J2.5 (Land PPLI)"
-            row = cls._lookup(cls.LAND_ENTITY_MAP, entity)
-            if row:
-                plat_2c, act_2c, desc = row
-            else:
-                plat_2c, act_2c, desc = "GR", "NS", f"Ground Entity ({entity})"
-
-        elif symset == "25":  # KONTROL NOKTASI (CONTROL MEASURE)
-            j_msg = "J3.0 (Reference Point)"
-            plat_2c, act_2c, desc = "RP", "NS", f"Reference Point / Control Measure ({entity})"
-
-        code_5char = f"{c1}{plat_2c}{act_2c}"
-        breakdown = f"[{c1}: Kimlik] + [{plat_2c}: Platform] + [{act_2c}: Görev/Activity]"
-        details = (
-            f"• 5516 Ed.9 Mesaj : {j_msg}\n"
-            f"• Kimlik (1. Harf): {c1} — {id_desc}\n"
-            f"• Platform (2-3)  : {plat_2c} (SIDC Entity: {entity})\n"
-            f"• Görev/Act (4-5) : {act_2c} (SIDC Mod1: {mod1}, Mod2: {mod2})\n"
-            f"• Taktik Açıklama : {desc}"
-        )
-
-        return {
-            "code_5char": code_5char,
-            "breakdown": breakdown,
-            "details": details,
-        }
-
-    @classmethod
-    def reverse(cls, code_5char: str) -> dict:
-        """
-        5 karakterlik Link 16 teşhis kodundan önerilen SIDC bileşenlerini üretir.
-        Dönüş: {
-            "success": bool,
-            "suggested_sidc": str,          # 30 haneli önerilen SIDC
-            "identity": str,                # Poz 4
-            "context": str,                 # Poz 3
-            "symbol_set": str,              # Poz 5-6
-            "entity": str,                  # Poz 11-16
-            "mod1": str,                    # Poz 17-18
-            "mod2": str,                    # Poz 19-20
-            "message": str                  # açıklama
-        }
-        """
-        code = (code_5char or "").strip().upper()
-        if len(code) != 5:
-            return {
-                "success": False,
-                "suggested_sidc": "",
-                "message": "Teşhis kodu tam 5 karakter olmalıdır (örn: FFTCP, FBMBM, KFTIN)."
-            }
-
-        c1 = code[0]
-        plat = code[1:3]
-        act = code[3:5]
-
-        # --- Kimlik + Context ---
-        ctx = "0"
-        ident = "3"  # varsayılan Friend
-
-        if c1 == "K":          # FAKER
-            ident = "6"
-            ctx = "1"
-        elif c1 == "J":        # JOKER
-            ident = "5"
-            ctx = "1"
-        else:
-            for k, v in cls.ID_CHAR.items():
-                if v[0] == c1:
-                    ident = k
-                    break
-
-        # --- Platform + Activity → Symbol Set + Entity + Modifiers ---
-        symbol_set = "01"
-        entity = "110000"
-        mod1 = "00"
-        mod2 = "00"
-        found = False
-        msg_parts = []
-
-        # 1) Hava Entity map'inde ara
-        for ent, (p, a, desc) in cls.AIR_ENTITY_MAP.items():
-            if p == plat and a == act:
-                symbol_set = "01"
-                entity = ent
-                found = True
-                msg_parts.append(f"Hava Entity: {desc}")
-                break
-
-        # 2) Hava Modifier map'inde ara (daha spesifik görev)
-        if not found:
-            for m, (p, a, desc) in cls.AIR_MOD1_MAP.items():
-                if p == plat and a == act:
-                    symbol_set = "01"
-                    entity = "110100"   # Fixed Wing genel
-                    mod1 = m
-                    found = True
-                    msg_parts.append(f"Hava Modifier: {desc}")
-                    break
-
-        # 3) Suüstü
-        if not found:
-            for ent, (p, a, desc) in cls.SURFACE_ENTITY_MAP.items():
-                if p == plat and a == act:
-                    symbol_set = "30"
-                    entity = ent
-                    found = True
-                    msg_parts.append(f"Suüstü: {desc}")
-                    break
-
-        # 4) Sualtı
-        if not found:
-            for ent, (p, a, desc) in cls.SUBSURFACE_ENTITY_MAP.items():
-                if p == plat and a == act:
-                    symbol_set = "35"
-                    entity = ent
-                    found = True
-                    msg_parts.append(f"Sualtı: {desc}")
-                    break
-
-        # 5) Kara
-        if not found:
-            for ent, (p, a, desc) in cls.LAND_ENTITY_MAP.items():
-                if p == plat and a == act:
-                    symbol_set = "10"
-                    entity = ent
-                    found = True
-                    msg_parts.append(f"Kara: {desc}")
-                    break
-
-        # 6) Özel durumlar
-        if not found:
-            if plat == "MS" and act == "AT":
-                symbol_set = "02"
-                entity = "110000"
-                found = True
-                msg_parts.append("Hava Füzesi")
-            elif plat == "SV" and act == "OR":
-                symbol_set = "05"
-                entity = "110000"
-                found = True
-                msg_parts.append("Uzay Platformu")
-            elif plat == "RP":
-                symbol_set = "25"
-                entity = "110000"
-                found = True
-                msg_parts.append("Referans Noktası / Control Measure")
-
-        if not found:
-            # Son çare: Hava Fixed Wing + verilen platform/activity
-            symbol_set = "01"
-            entity = "110100"
-            msg_parts.append(f"Eşleşme bulunamadı → varsayılan Hava Fixed Wing (Platform={plat}, Act={act})")
-
-        # 30 haneli SIDC oluştur (Version=13, Status=0, HQ=0, Amplifier=00, Frame=0, Reserved=0000, Country=000)
-        # Pozisyon: 1-2 Ver, 3 Ctx, 4 Id, 5-6 SS, 7 St, 8 HQ, 9-10 Amp, 11-16 Ent, 17-18 Mod1, 19-20 Mod2, 21-22 Cid, 23 Frm, 24-27 Res, 28-30 Cnt
-        suggested = (
-            f"13"           # Version 2525E
-            f"{ctx}"        # Context
-            f"{ident}"      # Identity
-            f"{symbol_set}" # Symbol Set
-            f"0"            # Status Present
-            f"0"            # HQ/TF/Dummy
-            f"00"           # Amplifier
-            f"{entity}"     # Entity
-            f"{mod1}"       # Sector 1
-            f"{mod2}"       # Sector 2
-            f"00"           # Common Mod ID
-            f"0"            # Frame Shape
-            f"0000"         # Reserved
-            f"000"          # Country
-        )
-
-        return {
-            "success": True,
-            "suggested_sidc": suggested,
-            "identity": ident,
-            "context": ctx,
-            "symbol_set": symbol_set,
-            "entity": entity,
-            "mod1": mod1,
-            "mod2": mod2,
-            "message": " | ".join(msg_parts) if msg_parts else "Varsayılan değerler kullanıldı"
-        }
-
-    @staticmethod
-    def _lookup(table: dict, entity: str):
-        if entity in table:
-            return table[entity]
-        if entity[:4] + "00" in table:
-            return table[entity[:4] + "00"]
-        if entity[:2] + "0000" in table:
-            return table[entity[:2] + "0000"]
-        return None
+PREVIEW_PX = 450      # önizleme görüntüsü boyutu
+RENDER_DELAY_MS = 80  # hızlı değişimlerde render'ı birleştirme süresi
+CACHE_SIZE = 256      # SIDC başına tutulacak SVG/PNG sayısı
 
 
 # =====================================================================
-# 2. GÖRSELLEŞTİRİCİ ARAYÜZ SINIFI
+# GÖRSELLEŞTİRİCİ ARAYÜZ SINIFI
 # =====================================================================
 class MilStd2525EVisualizer(BaseApp):
     """Visual browser built on top of the supplied SIDC generator."""
@@ -466,6 +56,8 @@ class MilStd2525EVisualizer(BaseApp):
         self.render_after_id = None
         self._last_svg = None
         self._last_used_sidc = ""
+        # SIDC -> (svg, kullanılan_sidc, png_bytes | None); LRU önbellek
+        self._render_cache = OrderedDict()
         super().__init__(root)
         self.root.minsize(1150, 840)
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
@@ -745,11 +337,24 @@ class MilStd2525EVisualizer(BaseApp):
             justify=tk.LEFT
         ).pack(anchor=tk.W, pady=(3, 0))
 
-    def copy_l16_code(self):
-        code = self.l16_code_var.get().strip()
+    # ------------------------------------------------------------------
+    # Pano / bildirim yardımcıları
+    # ------------------------------------------------------------------
+    def _notify(self, msg):
+        """Kısa bilgi mesajını modal pencere açmadan durum satırında gösterir."""
+        if hasattr(self, "render_status"):
+            self.render_status.set(msg)
+
+    def _copy(self, text, label):
         self.root.clipboard_clear()
-        self.root.clipboard_append(code)
-        messagebox.showinfo("Kopyalandı", f"Link 16 Teşhis Kodu kopyalandı: {code}")
+        self.root.clipboard_append(text)
+        self._notify(f"✓ {label} panoya kopyalandı: {text}")
+
+    def copy_sidc(self):
+        self._copy(self.sidc_var.get(), "SIDC")
+
+    def copy_l16_code(self):
+        self._copy(self.l16_code_var.get().strip(), "Link 16 teşhis kodu")
 
     def reverse_l16_to_sidc(self):
         """Link 16 5 karakterlik teşhis kodundan SIDC üret ve arayüzü güncelle."""
@@ -762,23 +367,12 @@ class MilStd2525EVisualizer(BaseApp):
             return
 
         suggested = result["suggested_sidc"]
-        self.rev_status_var.set(
-            f"Önerilen SIDC: {suggested}\n{result['message']}"
-        )
+        self.rev_status_var.set(f"✓ {code} → {suggested}\n{result['message']}")
 
-        # Ana SIDC alanına yaz ve decode et (BaseApp'in decode_sidc metodunu kullan)
+        # Ana SIDC alanına yaz ve decode et (sol paneldeki alanlar ve sembol güncellenir)
         self.ent_dec.delete(0, tk.END)
         self.ent_dec.insert(0, suggested)
         self.decode_sidc()
-
-        # Ayrıca combobox'ları da mümkün olduğunca ayarla (decode zaten yapıyorsa yeterli)
-        messagebox.showinfo(
-            "Dönüşüm Başarılı",
-            f"Teşhis: {code}\n\n"
-            f"Önerilen SIDC:\n{suggested}\n\n"
-            f"{result['message']}\n\n"
-            "Sol paneldeki alanlar güncellendi ve sembol çizildi."
-        )
 
     def _on_canvas_resize(self, event):
         if self.preview_canvas.find_withtag("center_item"):
@@ -786,28 +380,32 @@ class MilStd2525EVisualizer(BaseApp):
                 "center_item", event.width // 2, event.height // 2
             )
 
-    def _fill_entity_list(self):
+    # ------------------------------------------------------------------
+    # Entity listesi
+    # ------------------------------------------------------------------
+    def _fill_entity_list(self, keys=None):
         if not hasattr(self, "entity_list"):
             return
         self.entity_list.delete(0, tk.END)
-        for key in self.cur_e.keys():
-            self.entity_list.insert(tk.END, key)
+        self.entity_list.insert(tk.END, *(self.cur_e.keys() if keys is None else keys))
 
     def on_symset_change(self, init_mode=False):
         super().on_symset_change(init_mode=init_mode)
         self._fill_entity_list()
 
+    def decode_sidc(self):
+        super().decode_sidc()
+        # Çözümleme tabloda olmayan bir entity eklemiş olabilir; listeyi yenile
+        self._fill_entity_list()
+
     def filter_ent(self, event=None):
         super().filter_ent(event)
-        self._fill_entity_list()
+        # Listeyi de aramaya göre daralt; boş aramada tam liste
         q = self.ent_q.get().strip().lower()
-        if q:
-            for i, item in enumerate(self.entity_list.get(0, tk.END)):
-                if q in item.lower():
-                    self.entity_list.selection_clear(0, tk.END)
-                    self.entity_list.selection_set(i)
-                    self.entity_list.see(i)
-                    break
+        self._fill_entity_list([k for k in self.cur_e if q in k.lower()] if q else None)
+        if q and self.entity_list.size():
+            self.entity_list.selection_set(0)
+            self.entity_list.see(0)
 
     def on_entity_list_select(self, event=None):
         sel = self.entity_list.curselection()
@@ -819,30 +417,47 @@ class MilStd2525EVisualizer(BaseApp):
 
     def update_sidc(self):
         super().update_sidc()
+        if not hasattr(self, "preview_canvas"):
+            return
         if self.render_after_id is not None:
             try:
                 self.root.after_cancel(self.render_after_id)
             except Exception:
                 pass
-        self.render_after_id = self.root.after(80, self.render_symbol)
+        self.render_after_id = self.root.after(RENDER_DELAY_MS, self.render_symbol)
 
-    def _extract_svg_from_symbol(self, sym):
+    # ------------------------------------------------------------------
+    # Render (SVG/PNG önbellekli)
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _extract_svg_from_symbol(sym):
         if hasattr(sym, "as_svg"):
             return sym.as_svg()
         if hasattr(sym, "asSVG"):
             return sym.asSVG()
         raise RuntimeError("milsymbol Symbol nesnesinde SVG metodu bulunamadı.")
 
-    def _get_svg(self):
+    def _cache_get(self, sidc):
+        entry = self._render_cache.get(sidc)
+        if entry is not None:
+            self._render_cache.move_to_end(sidc)
+        return entry
+
+    def _cache_put(self, sidc, entry):
+        self._render_cache[sidc] = entry
+        self._render_cache.move_to_end(sidc)
+        while len(self._render_cache) > CACHE_SIZE:
+            self._render_cache.popitem(last=False)
+
+    def _build_svg(self, raw_sidc):
+        """(svg, kullanılan_sidc) döndürür; 2525E başarısızsa 2525D'ye düşer."""
         if Symbol is None:
             raise RuntimeError(
                 "milsymbol bulunamadı. Paketleri kurun:\n"
                 "pip install -r requirements.txt"
             )
 
-        raw_sidc = self.sidc_var.get().strip()
         candidates = [raw_sidc]
-
         if len(raw_sidc) >= 20:
             candidates.append(raw_sidc[:20])
             candidates.append("10" + raw_sidc[2:20])
@@ -855,19 +470,39 @@ class MilStd2525EVisualizer(BaseApp):
                     continue
                 svg = self._extract_svg_from_symbol(sym)
                 if svg and "<svg" in svg:
-                    self._last_used_sidc = candidate
-                    return svg
+                    return svg, candidate
             except Exception as exc:
                 last_err = exc
 
         try:
             sym = Symbol(candidates[-1], size=180)
-            self._last_used_sidc = candidates[-1]
-            return self._extract_svg_from_symbol(sym)
+            return self._extract_svg_from_symbol(sym), candidates[-1]
         except Exception as exc:
             raise ValueError(
                 f"Bu SIDC için sembol üretilemedi ({last_err or exc})."
             )
+
+    def _get_svg(self):
+        raw_sidc = self.sidc_var.get().strip()
+        entry = self._cache_get(raw_sidc)
+        if entry is None:
+            svg, used = self._build_svg(raw_sidc)
+            entry = [svg, used, None]
+            self._cache_put(raw_sidc, entry)
+        self._last_svg, self._last_used_sidc = entry[0], entry[1]
+        return entry[0]
+
+    def _get_preview_png(self):
+        """Önizleme PNG'sini (önbellekten veya yeni) döndürür."""
+        svg = self._get_svg()
+        entry = self._render_cache[self.sidc_var.get().strip()]
+        if entry[2] is None:
+            entry[2] = cairosvg.svg2png(
+                bytestring=svg.encode("utf-8"),
+                output_width=PREVIEW_PX,
+                output_height=PREVIEW_PX,
+            )
+        return entry[2]
 
     def render_symbol(self):
         self.render_after_id = None
@@ -887,10 +522,8 @@ class MilStd2525EVisualizer(BaseApp):
         h = max(self.preview_canvas.winfo_height(), 420)
 
         try:
-            svg = self._get_svg()
-            self._last_svg = svg
-
             if cairosvg is None or Image is None or ImageTk is None:
+                self._get_svg()
                 self.render_status.set(
                     "SVG üretildi. Görsel önizleme için cairosvg + pillow kurulmalı."
                 )
@@ -905,11 +538,7 @@ class MilStd2525EVisualizer(BaseApp):
                 )
                 return
 
-            png = cairosvg.svg2png(
-                bytestring=svg.encode("utf-8"),
-                output_width=450,
-                output_height=450
-            )
+            png = self._get_preview_png()
             image = Image.open(BytesIO(png)).convert("RGBA")
             self.symbol_photo = ImageTk.PhotoImage(image)
 
@@ -926,9 +555,7 @@ class MilStd2525EVisualizer(BaseApp):
                 if self._last_used_sidc == full_sidc
                 else f"2525D Uyumluluk ({self._last_used_sidc})"
             )
-            self.render_status.set(
-                f"Renderer: milsymbol [{mode_note}]"
-            )
+            self.render_status.set(f"Renderer: milsymbol [{mode_note}]")
             self.meta_var.set(
                 f"Symbol Set: {self.cb_ss.get()}  |  Entity: {self.cb_ent.get()}"
             )
@@ -945,6 +572,12 @@ class MilStd2525EVisualizer(BaseApp):
             self.render_status.set("Render hatası (Link 16 teşhisi yukarıda hesaplandı)")
             self.meta_var.set("")
 
+    # ------------------------------------------------------------------
+    # Dışa aktarma
+    # ------------------------------------------------------------------
+    def _default_filename(self, ext):
+        return f"{self.sidc_var.get().strip()}_{self.l16_code_var.get()}.{ext}"
+
     def save_svg(self):
         try:
             svg = self._get_svg()
@@ -955,14 +588,18 @@ class MilStd2525EVisualizer(BaseApp):
         path = filedialog.asksaveasfilename(
             title="2525E SVG Kaydet",
             defaultextension=".svg",
-            initialfile=f"{self.sidc_var.get().strip()}_{self.l16_code_var.get()}.svg",
+            initialfile=self._default_filename("svg"),
             filetypes=[("SVG", "*.svg"), ("All files", "*.*")]
         )
         if not path:
             return
 
-        Path(path).write_text(svg, encoding="utf-8")
-        messagebox.showinfo("Kaydedildi", f"SVG dosyası kaydedildi:\n{path}")
+        try:
+            Path(path).write_text(svg, encoding="utf-8")
+        except OSError as exc:
+            messagebox.showerror("SVG Hatası", str(exc))
+            return
+        self._notify(f"✓ SVG kaydedildi: {path}")
 
     def save_png(self):
         if cairosvg is None:
@@ -978,7 +615,7 @@ class MilStd2525EVisualizer(BaseApp):
             path = filedialog.asksaveasfilename(
                 title="2525E PNG Kaydet",
                 defaultextension=".png",
-                initialfile=f"{self.sidc_var.get().strip()}_{self.l16_code_var.get()}.png",
+                initialfile=self._default_filename("png"),
                 filetypes=[("PNG", "*.png"), ("All files", "*.*")]
             )
             if not path:
@@ -990,9 +627,7 @@ class MilStd2525EVisualizer(BaseApp):
                 output_width=1000,
                 output_height=1000
             )
-            messagebox.showinfo(
-                "Kaydedildi", f"PNG dosyası kaydedildi:\n{path}"
-            )
+            self._notify(f"✓ PNG kaydedildi: {path}")
         except Exception as exc:
             messagebox.showerror("PNG Hatası", str(exc))
 

@@ -146,7 +146,9 @@ class MilStd2525EApp:
                 },
                 "s1": {
                     "09 - Passenger (Airliner)": "09", "00 - Not Applicable (No Statement)": "00",
-                    "02 - Bomber": "02", "04 - Fighter": "04", "05 - Interceptor": "05", "06 - Tanker": "06",
+                    "01 - Attack/Strike": "01", "02 - Bomber": "02", "03 - Cargo": "03", "04 - Fighter": "04",
+                    "05 - Interceptor": "05", "06 - Tanker": "06", "07 - Utility": "07", "08 - VSTOL/VTOL": "08",
+                    "22 - ASW": "22", "25 - Mine Countermeasures": "25", "26 - Search and Rescue": "26",
                     "10 - Ultra Light": "10", "11 - ACP": "11", "12 - AEW": "12", "16 - EC/Jammer": "16",
                     "17 - Patrol": "17", "18 - Reconnaissance": "18", "19 - Trainer": "19", "20 - Photo Recon": "20",
                     "21 - Personnel Recovery": "21", "23 - Communications": "23", "24 - Electronic Support (ES)": "24",
@@ -155,7 +157,8 @@ class MilStd2525EApp:
                     "36 - Multi-Mission": "36", "38 - ASW Helo LAMPS": "38", "39 - ASW Helo SH-60R": "39"
                 },
                 "s2": {
-                    "00 - Not Applicable (No Statement)": "00", "04 - Boom-Only": "04",
+                    "00 - Not Applicable (No Statement)": "00", "01 - Heavy": "01", "02 - Medium": "02",
+                    "03 - Light": "03", "04 - Boom-Only": "04",
                     "05 - Drogue-Only": "05", "06 - Boom and Drogue": "06", "11 - Downlinked": "11"
                 }
             },
@@ -568,6 +571,22 @@ class MilStd2525EApp:
     def find_k(self, d, val):
         return next((k for k, v in d.items() if v == val), None)
 
+    def _set_or_add(self, cb, attr, code):
+        """`code` değerini combobox'ta seçer; tabloda yoksa geçici seçenek ekler.
+
+        Böylece çözümlenen SIDC, menü tablosunda bulunmayan bir kod içerse bile
+        varsayılan değere dönmez (SIDC birebir korunur). Eklenen seçenek
+        sembol seti değişince (on_symset_change) kaybolur.
+        """
+        d = getattr(self, attr)
+        k = self.find_k(d, code)
+        if k is None:
+            k = f"{code} - (Tabloda yok)"
+            d = {k: code, **d}  # db tablosunu değiştirmemek için kopya
+            setattr(self, attr, d)
+            cb["values"] = list(d.keys())
+        cb.set(k)
+
     def decode_sidc(self):
         c = self.ent_dec.get().strip().upper()
         if len(c) != 30:
@@ -582,25 +601,24 @@ class MilStd2525EApp:
         self.on_symset_change()
         for cb, d, sl in [
             (self.cb_st, self.statuses, c[6:7]), (self.cb_hq, self.hq_tf, c[7:8]),
-            (self.cb_amp, self.amplifiers, c[8:10]), (self.cb_ent, self.cur_e, c[10:16]),
+            (self.cb_amp, self.amplifiers, c[8:10]),
             (self.cb_frm, self.frames, c[22:23])
         ]:
             k = self.find_k(d, sl)
             if k: cb.set(k)
+        self._set_or_add(self.cb_ent, "cur_e", c[10:16])
         if c[20] != "0":
             k = self.find_k(self.common_s1, c[20] + c[16:18])
             if k: self.cb_c1.set(k)
         else:
             self.cb_c1.current(0)
-            k = self.find_k(self.cur_s1, c[16:18])
-            if k: self.cb_s1.set(k)
+            self._set_or_add(self.cb_s1, "cur_s1", c[16:18])
         if c[21] != "0":
             k = self.find_k(self.common_s2, c[21] + c[18:20])
             if k: self.cb_c2.set(k)
         else:
             self.cb_c2.current(0)
-            k = self.find_k(self.cur_s2, c[18:20])
-            if k: self.cb_s2.set(k)
+            self._set_or_add(self.cb_s2, "cur_s2", c[18:20])
         self.ent_cnt.delete(0, tk.END)
         self.ent_cnt.insert(0, c[27:30])
         self.update_sidc()

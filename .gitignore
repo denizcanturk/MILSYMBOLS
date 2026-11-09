@@ -1,4 +1,34 @@
-__pycache__
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+
+# --- Sanal ortamlar ---
 .env/
-yeni/
+.env.*/
+.venv/
+venv/
+env/
+
+# --- Test / araç önbellekleri ---
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# --- Editör / IDE ---
 .vscode/
+.idea/
+*.swp
+*~
+
+# --- İşletim sistemi ---
+.DS_Store
+Thumbs.db
+
+# --- Proje ---
+yeni/
