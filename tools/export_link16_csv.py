@@ -9,8 +9,10 @@ bu yüzden tablolar değiştiğinde bu betiği yeniden çalıştırmak yeterlidi
     python3 tools/export_link16_csv.py çıktı_klasörü
 
 Üretilen dosyalar:
-    link16_sidc_eslesme.csv  Platform/Activity <-> Symbol Set/Entity/Mod1/Mod2
-    link16_kimlik.csv        1. harf (kimlik) <-> SIDC Context/Identity
+    link16_sidc_eslesme.csv          Platform/Activity <-> Symbol Set/Entity/Mod1/Mod2
+    link16_kimlik.csv                1. harf (kimlik) <-> SIDC Context/Identity
+    link16_sidc_tum_kimlikler.csv    İkisinin birleşimi: her eşleme × her kimlik,
+                                     hazır 5 harfli teşhis kodu ve hazır 30 haneli SIDC
 """
 
 import csv
@@ -133,6 +135,47 @@ def identity_rows():
     return rows
 
 
+# Genişletilmiş tablo için kimlikler: (harf, SIDC context, SIDC identity, ad)
+IDENTITIES = [
+    ("P", "0", "0", "Pending"),
+    ("U", "0", "1", "Unknown"),
+    ("A", "0", "2", "Assumed Friend"),
+    ("F", "0", "3", "Friend"),
+    ("N", "0", "4", "Neutral"),
+    ("S", "0", "5", "Suspect"),
+    ("H", "0", "6", "Hostile"),
+    ("K", "1", "6", "Faker (Tatbikat Düşmanı)"),
+    ("J", "1", "5", "Joker (Tatbikat Şüphelisi)"),
+]
+
+EXPANDED_COLUMNS = [
+    "Ortam", "Kimlik_Harfi", "Kimlik", "Teshis_Kodu", "SIDC",
+    "SIDC_Context", "SIDC_Identity",
+    "Link16_Platform", "Link16_Activity",
+    "Symbol_Set", "Symbol_Set_Adi", "Entity", "Entity_Adi",
+    "Mod1", "Mod1_Adi", "Mod2", "Mod2_Adi",
+    "Link16_Mesaj", "Yon", "Aciklama",
+]
+
+
+def expanded_rows(rows=None):
+    """Her eşleme satırını 9 kimlikle çoğaltır (sıra: eşleme, sonra kimlik)."""
+    out = []
+    for r in rows or collect_rows():
+        for c1, ctx, ident, id_name in IDENTITIES:
+            e = {k: r[k] for k in EXPANDED_COLUMNS if k in r}
+            e.update({
+                "Kimlik_Harfi": c1,
+                "Kimlik": id_name,
+                "Teshis_Kodu": f"{c1}{r['Link16_Platform']}{r['Link16_Activity']}",
+                "SIDC": _sidc(r["Symbol_Set"], r["Entity"], r["Mod1"], r["Mod2"], ctx, ident),
+                "SIDC_Context": ctx,
+                "SIDC_Identity": ident,
+            })
+            out.append({k: e[k] for k in EXPANDED_COLUMNS})
+    return out
+
+
 def write_csv(path, rows):
     # utf-8-sig: Türkçe karakterlerin Excel'de doğru görünmesi için BOM ekler
     with open(path, "w", newline="", encoding="utf-8-sig") as f:
@@ -147,8 +190,11 @@ def main():
     rows = collect_rows()
     write_csv(out / "link16_sidc_eslesme.csv", rows)
     write_csv(out / "link16_kimlik.csv", identity_rows())
-    print(f"{len(rows)} eşleme satırı -> {out / 'link16_sidc_eslesme.csv'}")
-    print(f"Kimlik tablosu        -> {out / 'link16_kimlik.csv'}")
+    expanded = expanded_rows(rows)
+    write_csv(out / "link16_sidc_tum_kimlikler.csv", expanded)
+    print(f"{len(rows)} eşleme satırı      -> {out / 'link16_sidc_eslesme.csv'}")
+    print(f"Kimlik tablosu             -> {out / 'link16_kimlik.csv'}")
+    print(f"{len(expanded)} satır (tüm kimlikler) -> {out / 'link16_sidc_tum_kimlikler.csv'}")
 
 
 if __name__ == "__main__":

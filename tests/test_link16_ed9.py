@@ -182,6 +182,21 @@ class CsvExportTests(unittest.TestCase):
                 if yon != "Yalnızca SIDC → Link16":
                     self.assertEqual(L.reverse(c)["suggested_sidc"], s)
 
+    def test_expanded_rows_cover_all_identities_and_match_converter(self):
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
+        from export_link16_csv import IDENTITIES, collect_rows, expanded_rows
+
+        base = collect_rows()
+        rows = expanded_rows(base)
+        self.assertEqual(len(rows), len(base) * len(IDENTITIES))
+        for r in rows:
+            c, s, yon = r["Teshis_Kodu"], r["SIDC"], r["Yon"]
+            with self.subTest(code=c, sidc=s):
+                if yon != "Yalnızca Link16 → SIDC":
+                    self.assertEqual(L.extract(s)["code_5char"], c)
+                if yon != "Yalnızca SIDC → Link16":
+                    self.assertEqual(L.reverse(c)["suggested_sidc"], s)
+
 
 if __name__ == "__main__":
     unittest.main()
